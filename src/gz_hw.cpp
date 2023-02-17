@@ -21,7 +21,7 @@
 #include "hardware_interface/types/hardware_interface_type_values.hpp"
 #include "ignition/transport/Node.hh"
 #include "rclcpp/rclcpp.hpp"
-#include "ros_ign_bridge/convert/sensor_msgs.hpp"
+#include "ros_gz_bridge/convert/sensor_msgs.hpp"
 
 namespace gz_control_hw
 {
@@ -41,6 +41,7 @@ public:
   JointValue command;
   ignition::transport::Node::Publisher pub_cmd_pos;
   ignition::transport::Node::Publisher pub_cmd_vel;
+  ignition::transport::Node::Publisher pub_cmd_force;
 };
 
 class GzHwPrivate
@@ -51,7 +52,7 @@ public:
   void jointStateCallback(const ignition::msgs::Model & ignMsg)
   {
     sensor_msgs::msg::JointState jointState;
-    ros_ign_bridge::convert_ign_to_ros(ignMsg, jointState);
+    ros_gz_bridge::convert_gz_to_ros(ignMsg, jointState);
     for (auto & joint : joints) {
       auto it = find(jointState.name.begin(), jointState.name.end(), joint.name);
       if (it != jointState.name.end()) {
@@ -59,6 +60,9 @@ public:
         joint.state.position = jointState.position[i];
         joint.state.velocity = jointState.velocity[i];
         joint.state.effort = jointState.effort[i];
+
+        if (std::isnan(joint.command.position))
+          joint.command.position = joint.state.position;
       }
     }
   }
@@ -111,6 +115,8 @@ hardware_interface::CallbackReturn GzHw::on_init(
       "/model/" + robot_name + "/joint/" + joint.name + "/0/cmd_pos");
     j.pub_cmd_vel = this->dataPtr->node.Advertise<ignition::msgs::Double>(
       "/model/" + robot_name + "/joint/" + joint.name + "/cmd_vel");
+    j.pub_cmd_force = this->dataPtr->node.Advertise<ignition::msgs::Double>(
+      "/model/" + robot_name + "/joint/" + joint.name + "/cmd_force");
     this->dataPtr->joints.push_back(j);
   }
 
@@ -202,9 +208,11 @@ hardware_interface::return_type GzHw::write(
       joint.pub_cmd_vel.Publish(msg);
     }
   } else if (receivedEffortCmd) {
-    // Effort control
-    RCLCPP_ERROR(rclcpp::get_logger("gz_hw"), "Effort control is not implemented");
-    return hardware_interface::return_type::ERROR;
+    for (auto & joint : joints) {
+      ignition::msgs::Double msg;
+      msg.set_data(joint.command.effort);
+      joint.pub_cmd_force.Publish(msg);
+    }
   } else {
     // Position control
     for (auto & joint : joints) {
