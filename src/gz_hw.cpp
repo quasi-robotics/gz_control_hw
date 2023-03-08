@@ -27,14 +27,6 @@
 namespace gz_control_hw
 {
 
-constexpr const auto kRobotTag = "robot";
-constexpr const auto kJointTag = "joint";
-constexpr const auto kMimicTag = "mimic";
-constexpr const auto kNameAttribute = "name";
-constexpr const auto kJointAttribute = "joint";
-constexpr const auto kMultiplierAttribute = "multiplier";
-constexpr const auto kOffsetAttribute = "offset";
-
 struct JointValue
 {
   double position{0.0};
@@ -52,16 +44,23 @@ struct MimicJoint
   ignition::transport::Node::Publisher pub_cmd_force;
 };
 
+enum cmdInterface
+{
+  ePosition = 1,
+  eVelocity = 2,
+  eEffort   = 4
+};
+
 class Joint
 {
 public:
   std::string name;
   JointValue state;
   JointValue command;
+  unsigned command_interfaces{0};
   ignition::transport::Node::Publisher pub_cmd_pos;
   ignition::transport::Node::Publisher pub_cmd_vel;
   ignition::transport::Node::Publisher pub_cmd_force;
-  std::vector<MimicJoint> mimics;
 };
 
 class GzHwPrivate
@@ -87,74 +86,9 @@ public:
     }
   }
 
-  void process_mimics(const std::string &urdf, const std::string &robot_name);
-
   std::vector<Joint> joints;
   ignition::transport::Node node;
 };
-
-
-void GzHwPrivate::process_mimics(const std::string &urdf, const std::string &robot_name)
-{
-  tinyxml2::XMLDocument doc;
-  
-  if (!doc.Parse(urdf.c_str()) && doc.Error())
-  {
-    throw std::runtime_error("invalid URDF passed in to robot parser");
-  }
-  if (doc.Error())
-  {
-    throw std::runtime_error("invalid URDF passed in to robot parser");
-  }
-
-  // Find robot tag
-  const tinyxml2::XMLElement * robot_it = doc.RootElement();
-
-  if (std::string(kRobotTag).compare(robot_it->Name()))
-  {
-    throw std::runtime_error("the robot tag is not root element in URDF");
-  }
-
-  const tinyxml2::XMLElement * joint_it = robot_it->FirstChildElement(kJointTag);
-  while (joint_it)
-  {
-    const tinyxml2::XMLElement * mimic_it = joint_it->FirstChildElement(kMimicTag);
-    if (mimic_it) {
-      auto joint_name = joint_it->Attribute(kNameAttribute);
-      auto joint_attr = mimic_it->Attribute(kJointAttribute);
-      auto multiplier_attr = mimic_it->Attribute(kMultiplierAttribute);
-      auto offset_attr = mimic_it->Attribute(kOffsetAttribute);
-
-      if (!joint_attr)
-        throw std::runtime_error("joint " + std::string(joint_name) + " has invalid mimic tag (no joint attribute)");
-
-      const auto mimicked_joint_it = std::find_if(
-          joints.begin(), joints.end(), [&joint_attr](Joint &j)
-          { return j.name == joint_attr; });
-
-      if (mimicked_joint_it != joints.end()) {
-        MimicJoint mimicJoint;
-        mimicJoint.name = joint_name;
-
-        if (multiplier_attr)
-          mimicJoint.multiplier = std::stod(multiplier_attr);
-        if (offset_attr)
-          mimicJoint.offset = std::stod(offset_attr);
-
-        mimicJoint.pub_cmd_pos = node.Advertise<ignition::msgs::Double>(
-          "/model/" + robot_name + "/joint/" + joint_name + "/0/cmd_pos");
-        mimicJoint.pub_cmd_vel = node.Advertise<ignition::msgs::Double>(
-          "/model/" + robot_name + "/joint/" + joint_name + "/cmd_vel");
-        mimicJoint.pub_cmd_force = node.Advertise<ignition::msgs::Double>(
-          "/model/" + robot_name + "/joint/" + joint_name + "/cmd_force");
-
-        mimicked_joint_it->mimics.push_back(mimicJoint);
-      }
-    }
-    joint_it = joint_it->NextSiblingElement(kJointTag);
-  }
-}
-
 
 hardware_interface::CallbackReturn GzHw::on_init(
   const hardware_interface::HardwareInfo & info)
@@ -204,8 +138,6 @@ hardware_interface::CallbackReturn GzHw::on_init(
       "/model/" + robot_name + "/joint/" + joint.name + "/cmd_force");
     this->dataPtr->joints.push_back(j);
   }
-
-  this->dataPtr->process_mimics(info.original_xml, robot_name);
 
   this->dataPtr->node.Subscribe(
     joint_states_ign_topic, &GzHwPrivate::jointStateCallback, this->dataPtr.get());
@@ -280,60 +212,60 @@ hardware_interface::return_type GzHw::write(
   const rclcpp::Time & /*time*/,
   const rclcpp::Duration & /*period*/)
 {
-  auto joints = this->dataPtr->joints;
+  ignition::msgs::Double msg;
 
-  bool receivedVelocityCmd = std::any_of(
-    joints.cbegin(), joints.cend(), [](auto j) {return j.command.velocity != 0.0;});
-  bool receivedEffortCmd = std::any_of(
-    joints.cbegin(), joints.cend(), [](auto j) {return j.command.effort != 0.0;});
-
-  if (receivedVelocityCmd) {
-    // Velocity control
-    for (auto & joint : joints) {
-      ignition::msgs::Double msg;
-      double value = joint.command.velocity;
-
-      msg.set_data(value);
-      joint.pub_cmd_vel.Publish(msg);
-
-      for (auto &mimic : joint.mimics) {
-        if (!std::isnan(value))
-          value = value * mimic.multiplier + mimic.offset;
-        msg.set_data(value);
-        mimic.pub_cmd_vel.Publish(msg);
-      }
-    }
-  } else if (receivedEffortCmd) {
-    for (auto & joint : joints) {
-      ignition::msgs::Double msg;
-      double value = joint.command.effort;
-
-      msg.set_data(value);
+  for (auto joint : this->dataPtr->joints)
+  {
+    if (joint.command_interfaces&eEffort)
+    {
+      msg.set_data(joint.command.effort);
       joint.pub_cmd_force.Publish(msg);
-
-      for (auto &mimic : joint.mimics) {
-        if (!std::isnan(value))
-          value = value * mimic.multiplier + mimic.offset;
-        msg.set_data(value);
-        mimic.pub_cmd_force.Publish(msg);
-      }
     }
-  } else {
-    // Position control
-    for (auto & joint : joints) {
-      ignition::msgs::Double msg;
-      double value = joint.command.position;
 
-      msg.set_data(value);
+    if (joint.command_interfaces&eVelocity)
+    {
+      msg.set_data(joint.command.velocity);
+      joint.pub_cmd_vel.Publish(msg);
+    }
+
+    if (joint.command_interfaces&ePosition)
+    {
+      msg.set_data(joint.command.position);
       joint.pub_cmd_pos.Publish(msg);
-
-      for (auto &mimic : joint.mimics) {
-        if (!std::isnan(value))
-          value = value * mimic.multiplier + mimic.offset;
-        msg.set_data(value);
-        mimic.pub_cmd_pos.Publish(msg);
-      }
     }
+  }
+
+  return hardware_interface::return_type::OK;
+}
+
+hardware_interface::return_type GzHw::perform_command_mode_switch(
+  const std::vector<std::string> &start_interfaces,
+  const std::vector<std::string> & /*stop_interfaces*/)
+{
+  for(const auto& entry : start_interfaces) {
+    auto p = entry.find('/');
+    if(p == std::string::npos)
+      continue;
+
+    std::string joint_name = entry.substr(0, p);
+    std::string interface = entry.substr(p + 1);
+
+    auto jit = std::find_if(this->dataPtr->joints.begin(), this->dataPtr->joints.end(),
+                            [&joint_name](const auto &joint)
+                            { return joint.name == joint_name; });
+
+    if (jit == this->dataPtr->joints.end())
+    {
+      RCLCPP_ERROR(rclcpp::get_logger("gz_hw"), "Unknown joint: %s. Skipping.", joint_name.c_str());
+      continue;
+    }
+
+    if (interface == hardware_interface::HW_IF_POSITION)
+      jit->command_interfaces |= ePosition;
+    else if (interface == hardware_interface::HW_IF_VELOCITY)
+      jit->command_interfaces |= eVelocity;
+    else if (interface == hardware_interface::HW_IF_EFFORT)
+      jit->command_interfaces |= eEffort;
   }
 
   return hardware_interface::return_type::OK;

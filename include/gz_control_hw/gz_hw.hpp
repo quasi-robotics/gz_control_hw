@@ -63,6 +63,11 @@ public:
   hardware_interface::return_type write(
     const rclcpp::Time & time, const rclcpp::Duration & period) override;
 
+  GZ_CONTROL_HW_PUBLIC
+  hardware_interface::return_type perform_command_mode_switch(
+    const std::vector<std::string> & start_interfaces,
+    const std::vector<std::string> & /*stop_interfaces*/) override;
+
 private:
   std::unique_ptr<GzHwPrivate> dataPtr;
 };
