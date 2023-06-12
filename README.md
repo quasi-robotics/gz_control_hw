@@ -1,8 +1,8 @@
 # Hardware Interface for Ignition Gazebo and ROS2 Control
 
+[![Build and Test (humble)](../../actions/workflows/build_and_test_humble.yaml/badge.svg?branch=humble)](../../actions/workflows/build_and_test_humble.yaml?query=branch:humble)
+[![Build and Test (iron)](../../actions/workflows/build_and_test_iron.yaml/badge.svg?branch=rolling)](../../actions/workflows/build_and_test_iron.yaml?query=branch:rolling)
 [![Build and Test (rolling)](../../actions/workflows/build_and_test_rolling.yaml/badge.svg?branch=rolling)](../../actions/workflows/build_and_test_rolling.yaml?query=branch:rolling)
-[![Build and Test (humble)](../../actions/workflows/build_and_test_humble.yaml/badge.svg?branch=rolling)](../../actions/workflows/build_and_test_humble.yaml?query=branch:rolling)
-[![Build and Test (galactic)](../../actions/workflows/build_and_test_galactic.yaml/badge.svg?branch=galactic)](../../actions/workflows/build_and_test_galactic.yaml?query=branch:galactic)
 
 See [ijnek/gz_control_hw_demo](https://github.com/ijnek/gz_control_hw_demo) for how to use this package.
 
@@ -10,10 +10,10 @@ See [ijnek/gz_control_hw_demo](https://github.com/ijnek/gz_control_hw_demo) for 
 
 ROS 2 version | Gazebo version | Branch
 -- | -- | --
-Galactic | Edifice (default) | [galactic](https://github.com/ijnek/gz_control_hw/tree/galactic)
-Galactic | Fortress | [galactic](https://github.com/ijnek/gz_control_hw/tree/galactic)
-Humble | Fortress (default) | [rolling](https://github.com/ijnek/gz_control_hw/tree/rolling)
-Humble | Garden | [rolling](https://github.com/ijnek/gz_control_hw/tree/rolling)
+Humble | Fortress (default) | [humble](https://github.com/ijnek/gz_control_hw/tree/humble)
+Humble | Garden | [humble](https://github.com/ijnek/gz_control_hw/tree/humble)
+Iron | Fortress (default) | [rolling](https://github.com/ijnek/gz_control_hw/tree/rolling)
+Iron | Garden | [rolling](https://github.com/ijnek/gz_control_hw/tree/rolling)
 Rolling | Edifice | [rolling](https://github.com/ijnek/gz_control_hw/tree/rolling)
 Rolling | Fortress (default) | [rolling](https://github.com/ijnek/gz_control_hw/tree/rolling)
 Rolling | Garden | [rolling](https://github.com/ijnek/gz_control_hw/tree/rolling)
@@ -45,8 +45,8 @@ The following steps are for Linux and OSX.
     source /opt/ros/rolling/setup.bash
 
     # Clone repoitory (**select one** from below, depending on your ROS 2 distro)
-    git clone https://github.com/ijnek/gz_control_hw.git -b galactic  # Galactic
-    git clone https://github.com/ijnek/gz_control_hw.git -b rolling  # Humble, Rolling
+    git clone https://github.com/ijnek/gz_control_hw.git -b humble  # Humble
+    git clone https://github.com/ijnek/gz_control_hw.git -b rolling  # Rolling
     ```
 
 1. Install dependencies (this may also install Ignition):
